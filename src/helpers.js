@@ -1,11 +1,11 @@
-var url = require("url");
+var url = require('url');
 
 // All of the regular expressions in use within readability.
 var regexps = {
   unlikelyCandidatesRe: /combx|modal|comment|disqus|foot|header|menu|meta|nav|rss|shoutbox|sidebar|sponsor|social|teaserlist|time|tweet|twitter/i,
   okMaybeItsACandidateRe: /and|article|body|column|main|story|entry|^post/im,
   positiveRe: /article|body|content|entry|hentry|page|pagination|post|section|chapter|description|main|blog|text/i,
-  negativeRe: /combx|comment|contact|foot|footer|footnote|link|media|meta|promo|related|scroll|shoutbox|sponsor|utility|tags|widget/i,
+  negativeRe: /combx|comment|contact|foot|footer|footnote|link|media|meta|promo|related|scroll|shoutbox|sponsor|utility|tags|widget|title|ad|Ad/i,
   divToPElementsRe: /<(a|blockquote|dl|div|img|ol|p|pre|table|ul)/i,
   replaceBrsRe: /(<br[^>]*>[ \n\r\t]*){2,}/gi,
   replaceFontsRe: /<(\/?)font[^>]*>/gi,
@@ -13,12 +13,12 @@ var regexps = {
   normalizeRe: /\s{2,}/g,
   killBreaksRe: /(<br\s*\/?>(\s|&nbsp;?)*){1,}/g,
   videoRe: /http:\/\/(www\.)?(youtube|vimeo|youku|tudou|56|yinyuetai)\.com/i,
-  attributeRe: /blog|post|article/i
+  attributeRe: /blog|post|article/i,
 };
 
 var dbg;
 exports.debug = function(debug) {
-  dbg = (debug) ? console.log : function() {};
+  dbg = debug ? console.log : function() {};
 };
 
 var cleanRules = [];
@@ -33,7 +33,7 @@ module.exports.setCleanRules = function(rules) {
  *
  * @return void
  **/
-var prepDocument = module.exports.prepDocument = function(document) {
+var prepDocument = (module.exports.prepDocument = function(document) {
   var frames = document.getElementsByTagName('frame');
   if (frames.length > 0) {
     var bestFrame = null;
@@ -65,17 +65,17 @@ var prepDocument = module.exports.prepDocument = function(document) {
       }
     }
   }
-  
+
   // Strip out all <script> tags, as they *should* be useless
   var scripts = document.getElementsByTagName('script');
-  [].forEach.call(scripts, function (node) {
+  [].forEach.call(scripts, function(node) {
     node.parentNode.removeChild(node);
   });
 
   // turn all double br's into p's
   // note, this is pretty costly as far as processing goes. Maybe optimize later.
   // document.body.innerHTML = document.body.innerHTML.replace(regexps.replaceBrsRe, '</p><p>').replace(regexps.replaceFontsRe, '<$1span>');
-};
+});
 
 /***
  * grabArticle - Using a variety of metrics (content score, classname, element types), find the content that is
@@ -83,7 +83,10 @@ var prepDocument = module.exports.prepDocument = function(document) {
  *
  * @return Element
  **/
-var grabArticle = module.exports.grabArticle = function(document, preserveUnlikelyCandidates) {
+var grabArticle = (module.exports.grabArticle = function(
+  document,
+  preserveUnlikelyCandidates
+) {
   /**
    * First, node prepping. Trash nodes that look cruddy (like ones with the class name "comment", etc), and turn divs
    * into P tags where they have been used inappropriately (as in, where they contain no other block level elements.)
@@ -98,8 +101,13 @@ var grabArticle = module.exports.grabArticle = function(document, preserveUnlike
     var continueFlag = false;
     if (!preserveUnlikelyCandidates) {
       var unlikelyMatchString = node.className + '\n' + node.id;
-      if (unlikelyMatchString.search(regexps.unlikelyCandidatesRe) !== -1 && unlikelyMatchString.search(regexps.okMaybeItsACandidateRe) == -1 && node.tagName !== 'HTML' && node.tagName !== "BODY") {
-        dbg("Removing unlikely candidate - " + unlikelyMatchString);
+      if (
+        unlikelyMatchString.search(regexps.unlikelyCandidatesRe) !== -1 &&
+        unlikelyMatchString.search(regexps.okMaybeItsACandidateRe) == -1 &&
+        node.tagName !== 'HTML' &&
+        node.tagName !== 'BODY'
+      ) {
+        dbg('Removing unlikely candidate - ' + unlikelyMatchString);
         node.parentNode.removeChild(node);
         continueFlag = true;
       }
@@ -108,30 +116,36 @@ var grabArticle = module.exports.grabArticle = function(document, preserveUnlike
     // Turn all divs that don't have children block level elements into p's
     if (!continueFlag && node.tagName === 'DIV') {
       if (node.innerHTML.search(regexps.divToPElementsRe) === -1) {
-        dbg("Altering div to p");
+        dbg('Altering div to p');
         var newNode = document.createElement('p');
         newNode.innerHTML = node.innerHTML;
         node.parentNode.replaceChild(newNode, node);
       } else {
         // EXPERIMENTAL
-        Array.prototype.slice.call(node.childNodes).forEach(function(childNode) {
-          if (childNode.nodeType == 3 /*TEXT_NODE*/ ) {
-            var nextSibling = childNode.nextSibling
-            if (nextSibling && nextSibling.tagName == 'BR') {
-              dbg("replacing text node followed by br with a p tag with the same content.");
-              var p = document.createElement('p');
-              p.innerHTML = childNode.nodeValue;
-              childNode.parentNode.removeChild(nextSibling)
-              childNode.parentNode.replaceChild(p, childNode);
-            } else {
-              // use span instead of p. Need more tests.
-              dbg("replacing text node with a span tag with the same content.");
-              var span = document.createElement('span');
-              span.innerHTML = childNode.nodeValue;
-              childNode.parentNode.replaceChild(span, childNode);
+        Array.prototype.slice
+          .call(node.childNodes)
+          .forEach(function(childNode) {
+            if (childNode.nodeType == 3 /*TEXT_NODE*/) {
+              var nextSibling = childNode.nextSibling;
+              if (nextSibling && nextSibling.tagName == 'BR') {
+                dbg(
+                  'replacing text node followed by br with a p tag with the same content.'
+                );
+                var p = document.createElement('p');
+                p.innerHTML = childNode.nodeValue;
+                childNode.parentNode.removeChild(nextSibling);
+                childNode.parentNode.replaceChild(p, childNode);
+              } else {
+                // use span instead of p. Need more tests.
+                dbg(
+                  'replacing text node with a span tag with the same content.'
+                );
+                var span = document.createElement('span');
+                span.innerHTML = childNode.nodeValue;
+                childNode.parentNode.replaceChild(span, childNode);
+              }
             }
-          }
-        });
+          });
       }
     }
   }
@@ -142,7 +156,7 @@ var grabArticle = module.exports.grabArticle = function(document, preserveUnlike
    *
    * A score is determined by things like number of commas, class names, etc. Maybe eventually link density.
    **/
-  var allParagraphs = document.getElementsByTagName("p");
+  var allParagraphs = document.getElementsByTagName('p');
   var candidates = [];
 
   for (var i = 0; i < allParagraphs.length; ++i) {
@@ -182,7 +196,6 @@ var grabArticle = module.exports.grabArticle = function(document, preserveUnlike
     grandParentNode.readability.contentScore += contentScore / 2;
   }
 
-
   /**
    * After we've calculated scores, loop through all of the possible candidate nodes we found
    * and find the one with the highest score.
@@ -193,11 +206,25 @@ var grabArticle = module.exports.grabArticle = function(document, preserveUnlike
      * Scale the final candidates score based on link density. Good content should have a
      * relatively small link density (5% or less) and be mostly unaffected by this operation.
      **/
-    candidate.readability.contentScore = candidate.readability.contentScore * (1 - getLinkDensity(candidate));
+    candidate.readability.contentScore =
+      candidate.readability.contentScore * (1 - getLinkDensity(candidate));
 
-    dbg('Candidate: ' + candidate + " (" + candidate.className + ":" + candidate.id + ") with score " + candidate.readability.contentScore);
+    dbg(
+      'Candidate: ' +
+        candidate +
+        ' (' +
+        candidate.className +
+        ':' +
+        candidate.id +
+        ') with score ' +
+        candidate.readability.contentScore
+    );
 
-    if (!topCandidate || candidate.readability.contentScore > topCandidate.readability.contentScore) topCandidate = candidate;
+    if (
+      !topCandidate ||
+      candidate.readability.contentScore > topCandidate.readability.contentScore
+    )
+      topCandidate = candidate;
   });
 
   /**
@@ -216,27 +243,48 @@ var grabArticle = module.exports.grabArticle = function(document, preserveUnlike
     initializeNode(topCandidate);
   }
 
-
   /**
    * Now that we have the top candidate, look through its siblings for content that might also be related.
    * Things like preambles, content split by ads that we removed, etc.
    **/
   var articleContent = document.createElement('DIV');
   articleContent.id = 'readability-content';
-  var siblingScoreThreshold = Math.max(10, topCandidate.readability.contentScore * 0.2);
+  var siblingScoreThreshold = Math.max(
+    10,
+    topCandidate.readability.contentScore * 0.2
+  );
   var siblingNodes = topCandidate.parentNode.childNodes;
   for (var i = 0, il = siblingNodes.length; i < il; i++) {
     var siblingNode = siblingNodes[i];
     var append = false;
 
-    dbg('Looking at sibling node: ' + siblingNode + ' (' + siblingNode.className + ':' + siblingNode.id + ')' + ((typeof siblingNode.readability != 'undefined') ? (' with score ' + siblingNode.readability.contentScore) : ''));
-    dbg('Sibling has score ' + (siblingNode.readability ? siblingNode.readability.contentScore : 'Unknown'));
+    dbg(
+      'Looking at sibling node: ' +
+        siblingNode +
+        ' (' +
+        siblingNode.className +
+        ':' +
+        siblingNode.id +
+        ')' +
+        (typeof siblingNode.readability != 'undefined'
+          ? ' with score ' + siblingNode.readability.contentScore
+          : '')
+    );
+    dbg(
+      'Sibling has score ' +
+        (siblingNode.readability
+          ? siblingNode.readability.contentScore
+          : 'Unknown')
+    );
 
     if (siblingNode === topCandidate) {
       append = true;
     }
 
-    if (typeof siblingNode.readability != 'undefined' && siblingNode.readability.contentScore >= siblingScoreThreshold) {
+    if (
+      typeof siblingNode.readability != 'undefined' &&
+      siblingNode.readability.contentScore >= siblingScoreThreshold
+    ) {
       append = true;
     }
 
@@ -247,13 +295,17 @@ var grabArticle = module.exports.grabArticle = function(document, preserveUnlike
 
       if (nodeLength > 80 && linkDensity < 0.25) {
         append = true;
-      } else if (nodeLength < 80 && linkDensity === 0 && nodeContent.search(/\.( |$)/) !== -1) {
+      } else if (
+        nodeLength < 80 &&
+        linkDensity === 0 &&
+        nodeContent.search(/\.( |$)/) !== -1
+      ) {
         append = true;
       }
     }
 
     if (append) {
-      dbg("Appending node: " + siblingNode);
+      dbg('Appending node: ' + siblingNode);
 
       /* Append sibling and subtract from our list because it removes the node when you append to another node */
       articleContent.appendChild(siblingNode);
@@ -268,7 +320,7 @@ var grabArticle = module.exports.grabArticle = function(document, preserveUnlike
   prepArticle(articleContent);
 
   return articleContent;
-};
+});
 
 /**
  * Remove the style attribute on every e and under.
@@ -279,17 +331,20 @@ var grabArticle = module.exports.grabArticle = function(document, preserveUnlike
 function cleanStyles(e) {
   if (!e) return;
 
-
   // Remove any root styles, if we're able.
-  if (typeof e.removeAttribute == 'function' && e.className != 'readability-styled') e.removeAttribute('style');
+  if (
+    typeof e.removeAttribute == 'function' &&
+    e.className != 'readability-styled'
+  )
+    e.removeAttribute('style');
 
   // Go until there are no more child nodes
   var cur = e.firstChild;
   while (cur) {
     if (cur.nodeType == 1) {
       // Remove style attribute(s) :
-      if (cur.className != "readability-styled") {
-        cur.removeAttribute("style");
+      if (cur.className != 'readability-styled') {
+        cur.removeAttribute('style');
       }
       cleanStyles(cur);
     }
@@ -307,7 +362,6 @@ function killBreaks(e) {
   e.innerHTML = e.innerHTML.replace(regexps.killBreaksRe, '<br />');
 }
 
-
 /**
  * Get the inner text of a node - cross browser compatibly.
  * This also strips out any excess whitespace to be found.
@@ -315,16 +369,17 @@ function killBreaks(e) {
  * @param Element
  * @return string
  **/
-var getInnerText = exports.getInnerText = function(e, normalizeSpaces) {
-  var textContent = "";
+var getInnerText = (exports.getInnerText = function(e, normalizeSpaces) {
+  var textContent = '';
 
-  normalizeSpaces = (typeof normalizeSpaces == 'undefined') ? true : normalizeSpaces;
+  normalizeSpaces =
+    typeof normalizeSpaces == 'undefined' ? true : normalizeSpaces;
 
   textContent = e.textContent.trim();
 
-  if (normalizeSpaces) return textContent.replace(regexps.normalizeRe, " ");
+  if (normalizeSpaces) return textContent.replace(regexps.normalizeRe, ' ');
   else return textContent;
-}
+});
 
 /**
  * Get the number of times a string s appears in the node e.
@@ -334,7 +389,7 @@ var getInnerText = exports.getInnerText = function(e, normalizeSpaces) {
  * @return number (integer)
  **/
 function getCharCount(e, s) {
-  s = s || ",";
+  s = s || ',';
   return getInnerText(e).split(s).length;
 }
 
@@ -346,7 +401,7 @@ function getCharCount(e, s) {
  * @return number (float)
  **/
 function getLinkDensity(e) {
-  var links = e.getElementsByTagName("a");
+  var links = e.getElementsByTagName('a');
 
   var textLength = getInnerText(e).length;
   var linkLength = 0;
@@ -377,10 +432,16 @@ function getClassWeight(e) {
   }
 
   /* Look for a special ID */
-  if (typeof(e.id) == 'string' && e.id != "") {
+  if (typeof e.id == 'string' && e.id != '') {
     if (e.id.search(regexps.negativeRe) !== -1) weight -= 25;
 
     if (e.id.search(regexps.positiveRe) !== -1) weight += 25;
+  }
+
+  const itemprop = e.getAttribute('itemprop');
+  /* Look for a special itemprop */
+  if (itemprop === 'articleBody') {
+    weight += 25;
   }
 
   return weight;
@@ -396,9 +457,7 @@ function getClassWeight(e) {
  **/
 function clean(e, tag) {
   var targetList = e.getElementsByTagName(tag);
-  var isEmbed = (tag == 'object' || tag == 'embed');
-
-
+  var isEmbed = tag == 'object' || tag == 'embed';
 
   for (var y = targetList.length - 1; y >= 0; y--) {
     //------- user clean handler -----------------
@@ -445,7 +504,18 @@ function cleanConditionally(e, tag) {
   for (var i = curTagsLength - 1; i >= 0; i--) {
     var weight = getClassWeight(tagsList[i]);
 
-    dbg("Cleaning Conditionally " + tagsList[i] + " (" + tagsList[i].className + ":" + tagsList[i].id + ")" + ((typeof tagsList[i].readability != 'undefined') ? (" with score " + tagsList[i].readability.contentScore) : ''));
+    dbg(
+      'Cleaning Conditionally ' +
+        tagsList[i] +
+        ' (' +
+        tagsList[i].className +
+        ':' +
+        tagsList[i].id +
+        ')' +
+        (typeof tagsList[i].readability != 'undefined'
+          ? ' with score ' + tagsList[i].readability.contentScore
+          : '')
+    );
 
     if (weight < 0) {
       tagsList[i].parentNode.removeChild(tagsList[i]);
@@ -455,13 +525,13 @@ function cleanConditionally(e, tag) {
        * non-paragraph elements is more than paragraphs or other ominous signs, remove the element.
        **/
 
-      var p = tagsList[i].getElementsByTagName("p").length;
-      var img = tagsList[i].getElementsByTagName("img").length;
-      var li = tagsList[i].getElementsByTagName("li").length - 100;
-      var input = tagsList[i].getElementsByTagName("input").length;
+      var p = tagsList[i].getElementsByTagName('p').length;
+      var img = tagsList[i].getElementsByTagName('img').length;
+      var li = tagsList[i].getElementsByTagName('li').length - 100;
+      var input = tagsList[i].getElementsByTagName('input').length;
 
       var embedCount = 0;
-      var embeds = tagsList[i].getElementsByTagName("embed");
+      var embeds = tagsList[i].getElementsByTagName('embed');
       for (var ei = 0, il = embeds.length; ei < il; ei++) {
         if (embeds[ei].src && embeds[ei].src.search(regexps.videoRe) == -1) {
           embedCount++;
@@ -474,15 +544,15 @@ function cleanConditionally(e, tag) {
 
       if (img > p && img > 1) {
         toRemove = true;
-      } else if (li > p && tag != "ul" && tag != "ol") {
+      } else if (li > p && tag != 'ul' && tag != 'ol') {
         toRemove = true;
       } else if (input > Math.floor(p / 3)) {
         toRemove = true;
       } else if (contentLength < 25 && (img == 0 || img > 2)) {
         toRemove = true;
-      } else if (weight < 25 && linkDensity > .2) {
+      } else if (weight < 25 && linkDensity > 0.2) {
         toRemove = true;
-      } else if (weight >= 25 && linkDensity > .5) {
+      } else if (weight >= 25 && linkDensity > 0.5) {
         toRemove = true;
       } else if ((embedCount == 1 && contentLength < 75) || embedCount > 1) {
         toRemove = true;
@@ -495,11 +565,11 @@ function cleanConditionally(e, tag) {
   }
 }
 
-
 /**
  * Converts relative urls to absolute for images and links
  **/
 function fixLinks(e) {
+  console.log(e.ownerDocument);
   if (!e.ownerDocument.originalURL) {
     return;
   }
@@ -518,12 +588,15 @@ function fixLinks(e) {
     }
   }
 
+  /* remove all link */
   var as = e.getElementsByTagName('a');
   for (i = as.length - 1; i >= 0; --i) {
-    var href = as[i].getAttribute('href');
-    if (href) {
-      as[i].setAttribute('href', fixLink(href));
-    }
+    // var href = as[i].getAttribute('href');
+    // if (href) {
+    // as[i].setAttribute('href', fixLink(href));
+    as[i].removeAttribute('href');
+
+    // }
   }
 }
 
@@ -560,7 +633,6 @@ function cleanSingleHeader(e) {
       }
     }
   }
-
 }
 
 function prepArticle(articleContent) {
@@ -577,25 +649,32 @@ function prepArticle(articleContent) {
    * If there is only one h2, they are probably using it
    * as a header and not a subheader, so remove it since we already have a header.
    ***/
-  if (articleContent.getElementsByTagName('h2').length === 1) clean(articleContent, "h2");
+  if (articleContent.getElementsByTagName('h2').length === 1)
+    clean(articleContent, 'h2');
 
-  clean(articleContent, "iframe");
+  clean(articleContent, 'iframe');
 
   cleanHeaders(articleContent);
 
   /* Do these last as the previous stuff may have removed junk that will affect these */
-  cleanConditionally(articleContent, "table");
-  cleanConditionally(articleContent, "ul");
-  cleanConditionally(articleContent, "div");
+  cleanConditionally(articleContent, 'table');
+  cleanConditionally(articleContent, 'ul');
+  cleanConditionally(articleContent, 'div');
 
   /* Remove extra paragraphs */
   var articleParagraphs = articleContent.getElementsByTagName('p');
   for (var i = articleParagraphs.length - 1; i >= 0; i--) {
     var imgCount = articleParagraphs[i].getElementsByTagName('img').length;
     var embedCount = articleParagraphs[i].getElementsByTagName('embed').length;
-    var objectCount = articleParagraphs[i].getElementsByTagName('object').length;
+    var objectCount = articleParagraphs[i].getElementsByTagName('object')
+      .length;
 
-    if (imgCount == 0 && embedCount == 0 && objectCount == 0 && getInnerText(articleParagraphs[i], false) == '') {
+    if (
+      imgCount == 0 &&
+      embedCount == 0 &&
+      objectCount == 0 &&
+      getInnerText(articleParagraphs[i], false) == ''
+    ) {
       articleParagraphs[i].parentNode.removeChild(articleParagraphs[i]);
     }
   }
@@ -603,9 +682,14 @@ function prepArticle(articleContent) {
   cleanSingleHeader(articleContent);
 
   try {
-    articleContent.innerHTML = articleContent.innerHTML.replace(/<br[^>]*>\s*<p/gi, '<p');
+    articleContent.innerHTML = articleContent.innerHTML.replace(
+      /<br[^>]*>\s*<p/gi,
+      '<p'
+    );
   } catch (e) {
-    dbg("Cleaning innerHTML of breaks failed. This is an IE strict-block-elements bug. Ignoring.");
+    dbg(
+      'Cleaning innerHTML of breaks failed. This is an IE strict-block-elements bug. Ignoring.'
+    );
   }
 
   fixLinks(articleContent);
@@ -664,8 +748,10 @@ function initializeNode(node) {
 
   if (node.attributes.itemscope) {
     node.readability.contentScore += 5;
-    if (node.attributes.itemtype &&
-      regexps.attributeRe.test(node.getAttribute('itemtype'))) {
+    if (
+      node.attributes.itemtype &&
+      regexps.attributeRe.test(node.getAttribute('itemtype'))
+    ) {
       node.readability.contentScore += 30;
     }
   }
