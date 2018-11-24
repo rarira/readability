@@ -1,12 +1,12 @@
 {
   "name": "node-readability",
-  "version": "3.0.0",
-  "author": "Zihua Li",
+  "version": "3.0.1",
+  "author": "Inseong Park",
   "description": "Turning any web page into a clean view.",
-  "homepage": "https://github.com/luin/node-readability",
+  "homepage": "https://github.com/rarira/readability",
   "repository": {
     "type": "git",
-    "url": "git://github.com/luin/node-readability.git"
+    "url": "git://github.com/rarira/readability.git"
   },
   "bin": {
     "readability": "./src/cli.js"
